@@ -1,0 +1,9 @@
+[package]
+name = "http_core"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+bytes = "1.7.1"
+http-body-util = "0.1.2"
+hyper = "1.4.1"

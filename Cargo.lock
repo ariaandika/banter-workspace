@@ -38,6 +38,7 @@ version = "0.1.0"
 dependencies = [
  "bytes",
  "http-body-util",
+ "http_core",
  "hyper",
  "hyper-util",
  "tokio",
@@ -144,6 +145,15 @@ dependencies = [
  "http",
  "http-body",
  "pin-project-lite",
+]
+
+[[package]]
+name = "http_core"
+version = "0.1.0"
+dependencies = [
+ "bytes",
+ "http-body-util",
+ "hyper",
 ]
 
 [[package]]

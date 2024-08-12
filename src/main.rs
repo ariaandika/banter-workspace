@@ -1,9 +1,8 @@
 use std::{env::var, future::Future, pin::Pin, process};
-use bytes::Bytes;
-use http_body_util::Full;
-use hyper::{body::Incoming, server::conn::http1::Builder, service::Service};
+use hyper::{server::conn::http1::Builder, service::Service};
 use hyper_util::rt::TokioIo;
 use tokio::{net::TcpListener, runtime::Builder as Tokio, spawn};
+use http_core::{Request, Response, NOT_FOUND};
 
 fn main()  {
     Tokio::new_multi_thread()
@@ -33,9 +32,6 @@ async fn server() {
     }
 }
 
-pub type Request = hyper::Request<Incoming>;
-pub type Response = hyper::Response<Full<Bytes>>;
-
 pub struct Server;
 
 impl Service<Request> for Server {
@@ -46,6 +42,9 @@ impl Service<Request> for Server {
 }
 
 async fn router() -> hyper::Result<Response> {
-    Ok(Response::new(Full::new(Bytes::from_static(b"deez"))))
+    match NOT_FOUND {
+        Ok(ok) => Ok(ok),
+        Err(err) => Ok(err.into_response())
+    }
 }
 
