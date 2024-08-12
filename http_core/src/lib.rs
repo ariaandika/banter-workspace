@@ -20,16 +20,19 @@ pub const POST: &Method = &Method::POST;
 
 pub enum Error {
     Http(StatusCode),
+    BadRequest(String),
     InternalError(String),
     Auth(AuthError),
 }
 
 impl Error {
     pub fn into_response(self) -> Response {
+        let build = Response::builder();
         let build = match &self {
-            Error::Http(status) => Response::builder().status(status),
-            Error::InternalError(_) => Response::builder().status(StatusCode::INTERNAL_SERVER_ERROR),
-            Error::Auth(err) => Response::builder().status(auth_status_code(&err)),
+            Error::Http(status) => build.status(status),
+            Error::InternalError(_) => build.status(StatusCode::INTERNAL_SERVER_ERROR),
+            Error::Auth(err) => build.status(auth_status_code(&err)),
+            Error::BadRequest(_) => build.status(StatusCode::BAD_REQUEST),
         };
 
         // TODO: write body based on accept header
@@ -40,7 +43,8 @@ impl Error {
         match &self {
             Error::Http(status) => write!(f, "{}", status.canonical_reason().unwrap_or("HttpError")),
             Error::InternalError(msg) => write!(f, "{msg}"),
-            Error::Auth(_) => todo!(),
+            Error::Auth(err) => write!(f, "{err}"),
+            Error::BadRequest(msg) => write!(f, "{msg}"),
         }
     }
 }
@@ -137,6 +141,7 @@ fatal_err!(serde_json::Error);
 
 pub trait ErrorExt<T> where Self: Sized {
     fn fatal(self) -> Result<T>;
+    fn bad_request(self) -> Result<T>;
 }
 
 impl<T, E> ErrorExt<T> for std::result::Result<T, E> where E: std::error::Error {
@@ -144,6 +149,13 @@ impl<T, E> ErrorExt<T> for std::result::Result<T, E> where E: std::error::Error 
         match self {
             Ok(ok) => Ok(ok),
             Err(err) => Err(Error::InternalError(err.to_string())),
+        }
+    }
+
+    fn bad_request(self) -> Result<T> {
+        match self {
+            Ok(ok) => Ok(ok),
+            Err(err) => Err(Error::BadRequest(err.to_string())),
         }
     }
 }
