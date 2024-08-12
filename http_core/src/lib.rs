@@ -72,12 +72,27 @@ impl<S> IntoResponse for S where S: Serialize {
 }
 
 pub mod util {
+    use hyper::header::{AUTHORIZATION, COOKIE};
+    use super::Parts;
+
     pub fn normalize_path<'r>(path: &'r str) -> &'r str {
         match path {
             "/" => path,
             e if e.ends_with("/") => &e[..e.len()-1],
             e => e
         }
+    }
+
+    pub fn cookie<'r>(key: &str, parts: &'r Parts) -> Option<&'r str> {
+        parts.headers.get(COOKIE)?
+            .to_str().ok()?.split('&')
+            .find(|e|e.starts_with(key))?
+            .split_once('=').map(|e|e.1)
+    }
+
+    pub fn auth_header<'r>(parts: &'r Parts) -> Option<&'r str> {
+        parts.headers.get(AUTHORIZATION)?
+            .to_str().ok()?.split_once(" ").map(|e|e.1)
     }
 }
 
