@@ -35,8 +35,8 @@ impl Token {
         }
     }
 
-    pub fn from_token_str(key: &str, token_str: &str) -> Result<Self> {
-        let Some(body) = sign::verify(key, token_str) else {
+    pub fn from_token_str(secret: &str, token_str: &str) -> Result<Self> {
+        let Some(body) = sign::verify(secret, token_str) else {
             return Err(Error::Unauthorized);
         };
 

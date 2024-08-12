@@ -3,6 +3,7 @@ use std::fmt::{Debug, Display, Formatter as Fmt, Result as FmtRes};
 pub use hyper::{body::Incoming as Body, http::request::Parts};
 pub use serde_json::json;
 
+use auth::Error as AuthError;
 use bytes::Bytes;
 use http_body_util::Full;
 use hyper::{header::CONTENT_TYPE, http::response::Builder as ResponseBuilder, Method, StatusCode};
@@ -13,21 +14,25 @@ pub type Response<T = Full<Bytes>> = hyper::Response<T>;
 pub type Result<T = Response, E = Error> = std::result::Result<T,E>;
 
 pub const NOT_FOUND: Result = Err(Error::Http(StatusCode::NOT_FOUND));
+pub const UNAUTHORIZED: Result = Err(Error::Auth(AuthError::Unauthorized));
 pub const GET: &Method = &Method::GET;
 pub const POST: &Method = &Method::POST;
 
 pub enum Error {
     Http(StatusCode),
     InternalError(String),
+    Auth(AuthError),
 }
 
 impl Error {
     pub fn into_response(self) -> Response {
         let build = match &self {
             Error::Http(status) => Response::builder().status(status),
-            Error::InternalError(_) => Response::builder().status(StatusCode::INTERNAL_SERVER_ERROR)
+            Error::InternalError(_) => Response::builder().status(StatusCode::INTERNAL_SERVER_ERROR),
+            Error::Auth(err) => Response::builder().status(auth_status_code(&err)),
         };
 
+        // TODO: write body based on accept header
         build.empty().expect("Infallible")
     }
 
@@ -35,7 +40,16 @@ impl Error {
         match &self {
             Error::Http(status) => write!(f, "{}", status.canonical_reason().unwrap_or("HttpError")),
             Error::InternalError(msg) => write!(f, "{msg}"),
+            Error::Auth(_) => todo!(),
         }
+    }
+}
+
+fn auth_status_code(auth: &AuthError) -> StatusCode {
+    match auth {
+        AuthError::Unauthorized => StatusCode::UNAUTHORIZED,
+        AuthError::Forbidden => StatusCode::FORBIDDEN,
+        AuthError::InvalidToken => StatusCode::UNAUTHORIZED,
     }
 }
 
@@ -72,8 +86,9 @@ impl<S> IntoResponse for S where S: Serialize {
 }
 
 pub mod util {
+    use auth::Token;
     use hyper::header::{AUTHORIZATION, COOKIE};
-    use super::Parts;
+    use super::{Parts, Result, Error, AuthError};
 
     pub fn normalize_path<'r>(path: &'r str) -> &'r str {
         match path {
@@ -93,6 +108,16 @@ pub mod util {
     pub fn auth_header<'r>(parts: &'r Parts) -> Option<&'r str> {
         parts.headers.get(AUTHORIZATION)?
             .to_str().ok()?.split_once(" ").map(|e|e.1)
+    }
+
+    pub fn session<'r>(secret: &str, session_key: &str, parts: &'r Parts) -> Result<Token> {
+        match Token::from_token_str(secret, if let Some(t) = cookie(session_key, &parts)
+            { t } else if let Some(t) = auth_header(&parts) { t } else {
+                return Err(Error::Auth(AuthError::Unauthorized));
+            }) {
+            Ok(ok) => Ok(ok),
+            Err(err) => Err(Error::Auth(err)),
+        }
     }
 }
 
