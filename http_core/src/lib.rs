@@ -1,3 +1,5 @@
+use std::fmt::{Debug, Display, Formatter as Fmt, Result as FmtRes};
+
 pub use hyper::{body::Incoming as Body, http::request::Parts};
 pub use serde_json::json;
 
@@ -21,12 +23,18 @@ pub enum Error {
 
 impl Error {
     pub fn into_response(self) -> Response {
-        match self {
-            Error::Http(status) => hyper::Response::builder()
-                .status(status)
-                .body(Full::new(Bytes::new()))
-                .expect("infallible"),
-            Error::InternalError(_) => todo!()
+        let build = match &self {
+            Error::Http(status) => Response::builder().status(status),
+            Error::InternalError(_) => Response::builder().status(StatusCode::INTERNAL_SERVER_ERROR)
+        };
+
+        build.empty().expect("Infallible")
+    }
+
+    pub fn write(&self, f: &mut Fmt<'_>) -> std::fmt::Result {
+        match &self {
+            Error::Http(status) => write!(f, "{}", status.canonical_reason().unwrap_or("HttpError")),
+            Error::InternalError(msg) => write!(f, "{msg}"),
         }
     }
 }
@@ -74,10 +82,13 @@ pub mod util {
 }
 
 
+
+impl std::error::Error for Error { }
+impl Debug for Error { fn fmt(&self, f: &mut Fmt<'_>) -> FmtRes { self.write(f) } }
+impl Display for Error { fn fmt(&self, f: &mut Fmt<'_>) -> FmtRes { self.write(f) } }
+
 macro_rules! fatal_err { ($id: path) => {
-    impl From<$id> for Error {
-        fn from(value: $id) -> Self { Self::InternalError(value.to_string()) }
-    }
+    impl From<$id> for Error { fn from(value: $id) -> Self { Self::InternalError(value.to_string()) } }
 }}
 
 fatal_err!(hyper::Error);
