@@ -12,4 +12,4 @@ hyper-util = { version = "0.1.7", features = ["server", "http1", "tokio"] }
 tokio = { version = "1.39.2", features = ["rt-multi-thread"] }
 
 [workspace]
-members = ["http_core","auth", "types"]
+members = ["http_core","auth", "types", "sql"]
