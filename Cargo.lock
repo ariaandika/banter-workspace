@@ -54,6 +54,7 @@ dependencies = [
 name = "api"
 version = "0.1.0"
 dependencies = [
+ "auth",
  "http_core",
  "sql",
  "sqlx",
@@ -90,6 +91,7 @@ dependencies = [
  "base64",
  "hmac",
  "serde",
+ "serde_json",
  "sha2",
  "types",
 ]
@@ -1582,6 +1584,7 @@ version = "0.1.0"
 dependencies = [
  "chrono",
  "serde",
+ "serde_json",
 ]
 
 [[package]]
