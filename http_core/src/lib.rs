@@ -95,3 +95,16 @@ fatal_err!(hyper::Error);
 fatal_err!(hyper::http::Error);
 fatal_err!(serde_json::Error);
 
+pub trait ErrorExt<T> where Self: Sized {
+    fn fatal(self) -> Result<T>;
+}
+
+impl<T, E> ErrorExt<T> for std::result::Result<T, E> where E: std::error::Error {
+    fn fatal(self) -> Result<T> {
+        match self {
+            Ok(ok) => Ok(ok),
+            Err(err) => Err(Error::InternalError(err.to_string())),
+        }
+    }
+}
+
