@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+auth = { path = "../auth" }
 tokio = "1.39.2"
 types = { path = "../types" }
 http_core = { path = "../http_core" }
