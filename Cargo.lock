@@ -601,6 +601,7 @@ dependencies = [
 name = "http_core"
 version = "0.1.0"
 dependencies = [
+ "auth",
  "bytes",
  "http-body-util",
  "hyper",

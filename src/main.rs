@@ -32,8 +32,12 @@ async fn server() {
 
     let pg_pool = match var("DATABASE_URL") {
         Ok(db_url) => PgPoolOptions::new().connect_lazy(&db_url).expect("infallible"),
-        Err(_) => {
+        Err(std::env::VarError::NotPresent) => {
             eprintln!("DATABASE_URL env is required");
+            process::exit(1);
+        }
+        Err(err) => {
+            eprintln!("DATABASE_URL: {err}");
             process::exit(1);
         },
     };
