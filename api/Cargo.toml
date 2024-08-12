@@ -7,3 +7,5 @@ edition = "2021"
 tokio = "1.39.2"
 types = { path = "../types" }
 http_core = { path = "../http_core" }
+sql = { path = "../sql" }
+sqlx = { version = "0.8.0", features = ["postgres"] }
