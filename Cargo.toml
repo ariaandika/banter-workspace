@@ -7,9 +7,10 @@ edition = "2021"
 bytes = "1.7.1"
 http-body-util = "0.1.2"
 http_core = { path = "http_core" }
+api = { path = "api" }
 hyper = { version = "1.4.1", features = ["server", "http1"] }
 hyper-util = { version = "0.1.7", features = ["server", "http1", "tokio"] }
 tokio = { version = "1.39.2", features = ["rt-multi-thread"] }
 
 [workspace]
-members = ["http_core","auth", "types", "sql"]
+members = ["http_core","auth", "types", "sql", "api"]

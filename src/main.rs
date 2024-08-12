@@ -2,7 +2,7 @@ use std::{env::var, future::Future, pin::Pin, process};
 use hyper::{server::conn::http1::Builder, service::Service};
 use hyper_util::rt::TokioIo;
 use tokio::{net::TcpListener, runtime::Builder as Tokio, spawn};
-use http_core::{Request, Response, NOT_FOUND};
+use http_core::{Request, Response};
 
 fn main()  {
     Tokio::new_multi_thread()
@@ -38,11 +38,12 @@ impl Service<Request> for Server {
     type Response = Response;
     type Error = hyper::Error;
     type Future = Pin<Box<dyn Future<Output = hyper::Result<Response>> + Send>>;
-    fn call(&self, _req: Request) -> Self::Future { Box::pin(router()) }
+    fn call(&self, req: Request) -> Self::Future { Box::pin(router(req)) }
 }
 
-async fn router() -> hyper::Result<Response> {
-    match NOT_FOUND {
+async fn router(req: Request) -> hyper::Result<Response> {
+    let (parts, body) = req.into_parts();
+    match api::router(&parts, body) {
         Ok(ok) => Ok(ok),
         Err(err) => Ok(err.into_response())
     }
