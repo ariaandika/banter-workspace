@@ -38,15 +38,14 @@ impl Token {
 
     pub fn from_token_str(secret: &str, token_str: &str) -> Result<Self> {
         let Some(body) = sign::verify(secret, token_str) else {
-            debug!(lag="invalid hmac",stuff="GG","login failed");
+            debug!(target: "login failed","invalid hmac");
             return Err(Error::Unauthorized);
         };
 
-        match serde_json::from_str::<Token>(&body) {
+        match serde_json::from_str(&body) {
             Ok(token) => Ok(token),
             Err(error) => {
-                tracing::trace!(target: "Deez", ?error,"Yeet");
-                debug!(message="invalid hmac","login failed");
+                tracing::error!(target: "assertion failed", %error, "token deserialization");
                 Err(Error::InvalidToken)
             },
         }
@@ -56,7 +55,7 @@ impl Token {
         match serde_json::from_value(self.role_data.take()) {
             Ok(role_data) => Ok((self,role_data)),
             Err(error) => {
-                tracing::trace!(target: "Role Data Error", ?error);
+                tracing::error!(target: "assertion failed", %error, "role data deserialization");
                 Err(Error::InvalidToken)
             }
         }
@@ -78,7 +77,10 @@ pub fn verify_passwd(password: &str, hashed: &str) -> ArgonResult<Option<()>> {
     match passwd_ok {
         Ok(ok) => Ok(Some(ok)),
         Err(Password) => Ok(None),
-        Err(err) => Err(err),
+        Err(error) => {
+            tracing::error!(target: "assertion failed", %error, "password verification");
+            Err(error)
+        },
     }
 }
 
