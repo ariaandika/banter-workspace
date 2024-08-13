@@ -37,19 +37,26 @@ impl Token {
 
     pub fn from_token_str(secret: &str, token_str: &str) -> Result<Self> {
         let Some(body) = sign::verify(secret, token_str) else {
+            tracing::trace!("login failed: invalid token");
             return Err(Error::Unauthorized);
         };
 
         match serde_json::from_str::<Token>(&body) {
             Ok(token) => Ok(token),
-            _ => Err(Error::InvalidToken),
+            Err(error) => {
+                tracing::trace!(?error);
+                Err(Error::InvalidToken)
+            },
         }
     }
 
     pub fn split<T>(mut self) -> Result<(Self, T)> where T: DeserializeOwned {
         match serde_json::from_value(self.role_data.take()) {
             Ok(role_data) => Ok((self,role_data)),
-            _ => Err(Error::InvalidToken)
+            Err(error) => {
+                tracing::trace!(?error,"Role Data Error");
+                Err(Error::InvalidToken)
+            }
         }
     }
 }
