@@ -57,6 +57,7 @@ dependencies = [
  "auth",
  "http-body-util",
  "http_core",
+ "hyper",
  "serde",
  "serde_json",
  "sql",
@@ -96,6 +97,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2",
+ "tracing",
  "types",
 ]
 
