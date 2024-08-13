@@ -55,7 +55,10 @@ name = "api"
 version = "0.1.0"
 dependencies = [
  "auth",
+ "http-body-util",
  "http_core",
+ "serde",
+ "serde_json",
  "sql",
  "sqlx",
  "tokio",
