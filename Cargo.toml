@@ -13,6 +13,8 @@ hyper-util = { version = "0.1.7", features = ["server", "http1", "tokio"] }
 tokio = { version = "1.39.2", features = ["rt-multi-thread"] }
 sqlx = { version = "0.8.0", features = ["runtime-tokio", "postgres"] }
 dotenvy = "0.15.7"
+tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }
+tracing = "0.1.40"
 
 [workspace]
 members = ["http_core","auth", "types", "sql", "api"]

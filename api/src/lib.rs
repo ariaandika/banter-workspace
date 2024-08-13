@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{env::var, sync::{Arc, LazyLock}};
 use http_body_util::BodyExt;
 use hyper::{body::Body as _, StatusCode};
 use serde::Serialize;
@@ -7,11 +7,10 @@ use http_core::{*, util::*};
 use sqlx::PgPool;
 use types::Deserialize;
 
-const SESSION_KEY: &str = "access_token";
-
-const JWT_TOKEN: &str = "jwt";
 /// 64kb
 const MAX_PAYLOAD: u64 = 1024 * 64;
+const SESSION_KEY: &str = "access_token";
+const JWT_SECRET: LazyLock<String> = LazyLock::new(||var("JWT_SECRET").expect("checked"));
 
 pub async fn router(parts: &Parts, body: Body, state: Arc<PgPool>) -> Result {
     if &parts.method != GET && body.size_hint().upper().unwrap_or(u64::MAX) > MAX_PAYLOAD  {
@@ -27,7 +26,7 @@ pub async fn router(parts: &Parts, body: Body, state: Arc<PgPool>) -> Result {
                 .fetch_all(&*state).await.fatal()?;
             us.into_response()
         }
-        (GET, "/auth") => session(JWT_TOKEN, SESSION_KEY, &parts)?.into_response(),
+        (GET, "/auth") => session(&*JWT_SECRET, SESSION_KEY, &parts)?.into_response(),
 
         (POST, "/login") => {
             #[derive(Serialize, Deserialize)]
@@ -35,11 +34,12 @@ pub async fn router(parts: &Parts, body: Body, state: Arc<PgPool>) -> Result {
                 phone: String,
                 password: String
             }
-            // LATEST: tracings, return error based on accept header
+            // LATEST: return error based on accept header
             let login = serde_json::from_slice::<Login>(&body.collect().await.unwrap().to_bytes())
                 .bad_request()?;
 
-            login.into_response()
+            auth::sign::sign(&*JWT_SECRET, &serde_json::to_string(&login).expect("deez"))
+                .into_response()
         }
 
         _ => NOT_FOUND,

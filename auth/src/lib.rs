@@ -2,6 +2,7 @@ use std::fmt::{Debug, Display};
 
 use serde::de::DeserializeOwned;
 use serde_json::Value;
+use tracing::debug;
 use types::{Date, Deserialize, Role, Serialize, UserId, Users};
 use argon2::{password_hash::{Error::Password, Result as ArgonResult}, Argon2, PasswordHash, PasswordVerifier as _};
 
@@ -37,14 +38,15 @@ impl Token {
 
     pub fn from_token_str(secret: &str, token_str: &str) -> Result<Self> {
         let Some(body) = sign::verify(secret, token_str) else {
-            tracing::trace!("login failed: invalid token");
+            debug!(lag="invalid hmac",stuff="GG","login failed");
             return Err(Error::Unauthorized);
         };
 
         match serde_json::from_str::<Token>(&body) {
             Ok(token) => Ok(token),
             Err(error) => {
-                tracing::trace!(?error);
+                tracing::trace!(target: "Deez", ?error,"Yeet");
+                debug!(message="invalid hmac","login failed");
                 Err(Error::InvalidToken)
             },
         }
@@ -54,7 +56,7 @@ impl Token {
         match serde_json::from_value(self.role_data.take()) {
             Ok(role_data) => Ok((self,role_data)),
             Err(error) => {
-                tracing::trace!(?error,"Role Data Error");
+                tracing::trace!(target: "Role Data Error", ?error);
                 Err(Error::InvalidToken)
             }
         }
