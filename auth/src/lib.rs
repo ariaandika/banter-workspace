@@ -19,6 +19,7 @@ pub struct Token {
     pub created_at: Date,
     pub updated_at: Date,
     pub verified_at: Option<Date>,
+    pub signed_at: Date,
 }
 
 impl Token {
@@ -33,6 +34,7 @@ impl Token {
             created_at: user.created_at,
             updated_at: user.updated_at,
             verified_at: user.verified_at,
+            signed_at: Default::default()
         }
     }
 
@@ -103,31 +105,30 @@ pub type Result<T> = std::result::Result<T, Error>;
 
 pub enum Error {
     Unauthorized,
+    InvalidCredential,
     Forbidden,
     InvalidToken
 }
 
 impl Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let m = match self {
+        write!(f, "{}", match self {
             Error::Unauthorized => "Unauthorized",
             Error::Forbidden => "Forbidden",
             Error::InvalidToken => "InvalidToken",
-        };
-
-        write!(f, "{m}")
+            Error::InvalidCredential => "InvalidCredential",
+        })
     }
 }
 
 impl Debug for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let m = match self {
+        write!(f, "{}", match self {
             Error::Unauthorized => "Authentication Required",
             Error::Forbidden => "You are not allowed to access this resource",
             Error::InvalidToken => "Token invalid, please issue a new token",
-        };
-
-        write!(f, "{m}")
+            Error::InvalidCredential => "Invalid phone or password",
+        })
     }
 }
 

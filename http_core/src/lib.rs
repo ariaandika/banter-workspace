@@ -51,9 +51,8 @@ impl Error {
 
 fn auth_status_code(auth: &AuthError) -> StatusCode {
     match auth {
-        AuthError::Unauthorized => StatusCode::UNAUTHORIZED,
         AuthError::Forbidden => StatusCode::FORBIDDEN,
-        AuthError::InvalidToken => StatusCode::UNAUTHORIZED,
+        _ => StatusCode::UNAUTHORIZED
     }
 }
 
