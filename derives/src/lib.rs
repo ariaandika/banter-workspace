@@ -2,11 +2,21 @@ use proc_macro2::{Span, TokenStream};
 use quote::quote;
 use syn::{self, Data, DataStruct, DeriveInput, Fields};
 
-#[proc_macro_derive(EnumExt)]
-pub fn enum_str_derive(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
-    let ast = syn::parse_macro_input!(input as DeriveInput);
-    enum_ext_impl(&ast).unwrap_or_else(|err|err.to_compile_error()).into()
+macro_rules! decv {
+    ($i:tt,$d:tt,$f:ident) => {
+        #[proc_macro_derive($i)]
+        pub fn $d(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
+            $f(&syn::parse_macro_input!(input as DeriveInput)).unwrap_or_else(|err|err.to_compile_error()).into()
+        }
+    };
 }
+
+decv!(EnumExt,ex,enum_ext_impl);
+decv!(EnumDecode,ed,enum_decode_impl);
+decv!(IdDecode,id,id_decode_impl);
+decv!(FromRow,fr,from_row_impl);
+
+fn v<T>(i: usize) -> Vec<T> { Vec::with_capacity(i) }
 
 fn enum_ext_impl(ast: &DeriveInput) -> syn::Result<TokenStream> {
     let Data::Enum(en) = &ast.data else {
@@ -14,47 +24,30 @@ fn enum_ext_impl(ast: &DeriveInput) -> syn::Result<TokenStream> {
     };
 
     let name = &ast.ident;
+    let l = en.variants.len();
     let (impl_generics, ty_generics, where_clause) = ast.generics.split_for_impl();
+    let vl = syn::Lit::Int(syn::LitInt::new(&en.variants.len().to_string(), Span::call_site()));
 
-    let mut quotes = Vec::with_capacity(en.variants.len());
-
-    for variant in &en.variants {
-        let name = &variant.ident;
-        quotes.push(quote! { stringify!(#name) => Ok(Self::#name), });
-    }
-
-    let mut quotes2 = Vec::with_capacity(en.variants.len());
-
-    for variant in &en.variants {
-        let name = &variant.ident;
-        quotes2.push(quote! { Self::#name => stringify!(#name), });
-    }
-
-    let np = syn::Lit::Int(syn::LitInt::new(&en.variants.len().to_string(), Span::call_site()));
-    let mut quotes3 = Vec::with_capacity(en.variants.len());
-
-    for variant in &en.variants {
-        let name = &variant.ident;
-        quotes3.push(quote! { stringify!(#name), });
-    }
+    let (from_str,as_str,variants) = en.variants.iter()
+        .fold((v(l),v(l),v(l)),|(mut fs,mut ar,mut vs),v|{
+            let name = &v.ident;
+            fs.push(quote! { stringify!(#name) => Ok(Self::#name), });
+            ar.push(quote! { Self::#name => stringify!(#name), });
+            vs.push(quote! { stringify!(#name), });
+            (fs,ar,vs)
+        });
 
     Ok(quote! {
         impl #impl_generics #name #ty_generics #where_clause {
-            pub const VARIANTS: [&'static str;#np] = [#(#quotes3)*];
+            pub const VARIANTS: [&'static str;#vl] = [#(#variants)*];
             pub fn from_str<'r>(input: &'r str) -> Result<Self, &'r str> {
-                match input { #(#quotes)* _ => Err(input) }
+                match input { #(#from_str)* _ => Err(input) }
             }
             pub fn as_str(&self) -> &'static str {
-                match self { #(#quotes2)* }
+                match self { #(#as_str)* }
             }
         }
     })
-}
-
-#[proc_macro_derive(EnumDecode)]
-pub fn enum_decode_derive(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
-    let ast = syn::parse_macro_input!(input as DeriveInput);
-    enum_decode_impl(&ast).unwrap_or_else(|err|err.to_compile_error()).into()
 }
 
 fn enum_decode_impl(ast: &DeriveInput) -> syn::Result<TokenStream> {
@@ -81,14 +74,6 @@ fn enum_decode_impl(ast: &DeriveInput) -> syn::Result<TokenStream> {
     })
 }
 
-
-
-#[proc_macro_derive(IdDecode)]
-pub fn id_decode_derive(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
-    let ast = syn::parse_macro_input!(input as DeriveInput);
-    id_decode_impl(&ast).unwrap_or_else(|err|err.to_compile_error()).into()
-}
-
 fn id_decode_impl(ast: &DeriveInput) -> syn::Result<TokenStream> {
     let Data::Struct(DataStruct { fields: Fields::Unnamed(_), .. }) = &ast.data else {
         return Err(syn::Error::new_spanned(ast, "IdDecode not supported"))
@@ -110,13 +95,6 @@ fn id_decode_impl(ast: &DeriveInput) -> syn::Result<TokenStream> {
             }
         }
     })
-}
-
-
-#[proc_macro_derive(FromRow)]
-pub fn from_row_derive(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
-    let ast = syn::parse_macro_input!(input as DeriveInput);
-    from_row_impl(&ast).unwrap_or_else(|err|err.to_compile_error()).into()
 }
 
 fn from_row_impl(ast: &DeriveInput) -> syn::Result<TokenStream> {
