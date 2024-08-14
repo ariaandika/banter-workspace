@@ -1,3 +1,7 @@
+<p>
+    <img src="./Deps.png">
+</p>
+
 # BANTER Workspace
 
 BANTER Web Server - Rust Workspace
