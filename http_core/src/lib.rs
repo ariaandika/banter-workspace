@@ -1,4 +1,4 @@
-use std::fmt::{Debug, Display, Formatter as Fmt, Result as FmtRes};
+use std::{fmt::{Debug, Display, Formatter as Fmt, Result as FmtRes}, num::NonZeroUsize};
 
 pub use hyper::{body::Incoming as Body, http::request::Parts};
 pub use serde_json::json;
@@ -27,6 +27,10 @@ pub enum Error {
 
 impl Error {
     pub fn into_response(self) -> Response {
+        if let Error::InternalError(ref message) = self {
+            tracing::error!(target: "InternalError",message);
+        }
+
         let build = Response::builder();
         let build = match &self {
             Error::Http(status) => build.status(status),
