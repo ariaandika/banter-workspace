@@ -1,10 +1,11 @@
-pub use serde::{Serialize, Deserialize};
 use chrono::{DateTime, Utc};
+use derives::{EnumDecode, EnumExt, FromRow, IdDecode};
 use serde_json::Value;
 
+pub use serde::{Serialize, Deserialize};
 pub type Date = DateTime<Utc>;
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, EnumExt, EnumDecode)]
 #[serde(rename_all = "lowercase")]
 pub enum Role {
     Admin,
@@ -13,10 +14,10 @@ pub enum Role {
     Driver
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, IdDecode)]
 pub struct UserId(pub i32);
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, FromRow)]
 pub struct Users {
     pub user_id: UserId,
     pub name: String,
