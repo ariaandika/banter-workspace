@@ -5,6 +5,7 @@ pub const SELECT_MAX: i32 = 10;
 
 pub const SELECT_USERS: &str = "SELECT * FROM users";
 pub const FIND_USERS  : &str = "SELECT * FROM users WHERE user_id = $1";
+pub const FIND_USERS_BY_PHONE  : &str = "SELECT * FROM users WHERE phone = $1";
 pub const DELETE_USERS: &str = "DELETE FROM users WHERE user_id = $1";
 pub const INSERT_USERS: &str = concat!(
     "INSERT INTO users(",

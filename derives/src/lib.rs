@@ -1,6 +1,6 @@
 use proc_macro2::{Span, TokenStream};
 use quote::quote;
-use syn::{self, Data, DataStruct, DeriveInput, Fields, FieldsUnnamed};
+use syn::{self, Data, DataStruct, DeriveInput, Fields};
 
 #[proc_macro_derive(EnumExt)]
 pub fn enum_str_derive(input: proc_macro::TokenStream) -> proc_macro::TokenStream {

@@ -325,7 +325,6 @@ version = "0.1.0"
 dependencies = [
  "proc-macro2",
  "quote",
- "sqlx",
  "syn",
 ]
 
@@ -633,6 +632,7 @@ dependencies = [
  "hyper",
  "serde",
  "serde_json",
+ "tracing",
 ]
 
 [[package]]
