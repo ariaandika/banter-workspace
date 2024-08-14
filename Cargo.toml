@@ -17,4 +17,4 @@ tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }
 tracing = "0.1.40"
 
 [workspace]
-members = ["http_core","auth", "types", "sql", "api"]
+members = ["http_core","auth", "types", "sql", "api", "derives"]
