@@ -1338,6 +1338,9 @@ dependencies = [
 [[package]]
 name = "sql"
 version = "0.1.0"
+dependencies = [
+ "paste",
+]
 
 [[package]]
 name = "sqlformat"
