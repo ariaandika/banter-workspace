@@ -93,6 +93,7 @@ const JWT_SECRET: LazyLock<String> = LazyLock::new(||var("JWT_SECRET").expect("u
 
 pub trait PartsExt {
     fn normalize_path<'r>(&'r self) -> &'r str;
+    fn normalize_prefix<'r>(&'r self, prefix: usize) -> &'r str;
     fn get_cookie<'r>(&'r self, key: &str) -> Option<&'r str>;
     fn auth_header<'r>(&'r self) -> Option<&'r str>;
     fn get_session<'r>(&'r self) -> Result<Token>;
@@ -108,6 +109,17 @@ impl PartsExt for Parts {
             e => e
         }
     }
+
+    // panic if path prefix not checked
+    fn normalize_prefix<'r>(&'r self, prefix: usize) -> &'r str {
+        match self.uri.path() {
+            e @ "/" => e,
+            e if e.is_empty() => "/",
+            e if e.ends_with("/") => &e[prefix..e.len()-1],
+            e => &e[prefix..]
+        }
+    }
+
     fn get_cookie<'r>(&'r self, key: &str) -> Option<&'r str> {
         self.headers.get(COOKIE)?
             .to_str().ok()?.split('&')
