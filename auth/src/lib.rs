@@ -3,9 +3,10 @@ use std::fmt::{Debug, Display};
 use serde::de::DeserializeOwned;
 use serde_json::Value;
 use tracing::debug;
-use types::{Date, Deserialize, Role, Serialize, UserId, Users};
+use types::{Date, Deserialize, Serialize, UserId, Users, WhId, WhType};
 use argon2::{password_hash::{Error::Password, Result as ArgonResult}, Argon2, PasswordHash, PasswordVerifier as _};
 
+pub use types::Role;
 pub const DUMMY_PASSWD: &str = "$argon2id$v=19$m=19456,t=2,p=1$jZlzXaKWE9bOcXz99qDobg$L8MH9ZkgV/gdIhWQ72tNhDhmX4gPkdlzIUNfIF2oO4k";
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -20,6 +21,13 @@ pub struct Token {
     pub updated_at: Date,
     pub verified_at: Option<Date>,
     pub signed_at: Date,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SalesData {
+    pub wh_id: WhId,
+    pub wh_name: String,
+    pub wh_type: WhType,
 }
 
 impl Token {
