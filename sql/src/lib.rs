@@ -49,6 +49,7 @@ imtable!(wh_snapshot, snapshot_id, wh_sn);
 find!(users, phone);
 find!(warehouses, phone, wh);
 select!(tracings, order_id);
+select!(order_status, wh_id);
 find!(order_status, wh_id);
 
 pub const FIND_LATEST_TRACING: &str = concat!(

@@ -12,7 +12,7 @@ macro_rules! id {
 pub use serde::{Serialize, Deserialize};
 pub type Date = DateTime<Utc>;
 
-#[derive(Debug, Serialize, Deserialize, EnumExt, EnumDecode)]
+#[derive(Debug, PartialEq, Serialize, Deserialize, EnumExt, EnumDecode)]
 pub enum Role {
     Admin,
     Customer,
