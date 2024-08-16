@@ -1,4 +1,4 @@
-use std::{env::var, fmt::{Debug, Display, Formatter as Fmt, Result as FmtRes}, sync::LazyLock};
+use std::{borrow::Cow, env::var, fmt::{Debug, Display, Formatter as Fmt, Result as FmtRes}, sync::LazyLock};
 use auth::{Error as AuthError, Role, Token};
 use bytes::Bytes;
 use http_body_util::Full;
@@ -11,6 +11,7 @@ pub use serde_json::json;
 pub type Request = hyper::Request<Body>;
 pub type Response<T = Full<Bytes>> = hyper::Response<T>;
 pub type Result<T = Response, E = Error> = std::result::Result<T,E>;
+pub type Paginate = (i32,i32);
 
 pub const NOT_FOUND: Result = Err(Error::Http(StatusCode::NOT_FOUND));
 pub const UNAUTHORIZED: Result = Err(Error::Auth(AuthError::Unauthorized));
@@ -91,17 +92,18 @@ impl<S> IntoResponse for S where S: Serialize {
 const SESSION_KEY: &str = "access_token";
 const JWT_SECRET: LazyLock<String> = LazyLock::new(||var("JWT_SECRET").expect("unchecked jwt secret"));
 
-pub trait PartsExt {
-    fn normalize_path<'r>(&'r self) -> &'r str;
-    fn normalize_prefix<'r>(&'r self, prefix: usize) -> &'r str;
-    fn get_cookie<'r>(&'r self, key: &str) -> Option<&'r str>;
-    fn auth_header<'r>(&'r self) -> Option<&'r str>;
-    fn get_session<'r>(&'r self) -> Result<Token>;
-    fn get_session_role<'r>(&'r self, role: Role) -> Result<Token>;
+pub trait PartsExt<'r> {
+    fn normalize_path(&'r self) -> &'r str;
+    fn normalize_prefix(&'r self, prefix: usize) -> &'r str;
+    fn parse_query(&'r self) -> Paginate;
+    fn get_cookie(&'r self, key: &str) -> Option<&'r str>;
+    fn auth_header(&'r self) -> Option<&'r str>;
+    fn get_session(&'r self) -> Result<Token>;
+    fn get_session_role(&'r self, role: Role) -> Result<Token>;
 }
 
-impl PartsExt for Parts {
-    fn normalize_path<'r>(&'r self) -> &'r str {
+impl<'r> PartsExt<'r> for Parts {
+    fn normalize_path(&'r self) -> &'r str {
         match self.uri.path() {
             e @ "/" => e,
             e if e.is_empty() => "/",
@@ -111,7 +113,7 @@ impl PartsExt for Parts {
     }
 
     // panic if path prefix not checked
-    fn normalize_prefix<'r>(&'r self, prefix: usize) -> &'r str {
+    fn normalize_prefix(&'r self, prefix: usize) -> &'r str {
         match self.uri.path() {
             e @ "/" => e,
             e if e.is_empty() => "/",
@@ -120,19 +122,28 @@ impl PartsExt for Parts {
         }
     }
 
-    fn get_cookie<'r>(&'r self, key: &str) -> Option<&'r str> {
+    fn parse_query(&'r self) -> Paginate {
+        fn par((_, v): (Cow<str>,Cow<str>)) -> Option<i32> { v.parse().ok() }
+        let Some(q) = self.uri.query() else { return (20,0); };
+        let mut qs = form_urlencoded::parse(q.as_bytes());
+        let limit = qs.find(|(k,_)|k=="limit").and_then(par).unwrap_or(20);
+        let page = qs.find(|(k,_)|k=="page").and_then(par).unwrap_or(0);
+        (limit, limit * page)
+    }
+
+    fn get_cookie(&'r self, key: &str) -> Option<&'r str> {
         self.headers.get(COOKIE)?
             .to_str().ok()?.split('&')
             .find(|e|e.starts_with(key))?
             .split_once('=').map(|e|e.1)
     }
 
-    fn auth_header<'r>(&'r self) -> Option<&'r str> {
+    fn auth_header(&'r self) -> Option<&'r str> {
         self.headers.get(AUTHORIZATION)?
             .to_str().ok()?.split_once(" ").map(|e|e.1)
     }
 
-    fn get_session<'r>(&self) -> Result<Token> {
+    fn get_session(&self) -> Result<Token> {
         match Token::from_token_str(&*JWT_SECRET,
             if let Some(t) = self.get_cookie(SESSION_KEY) { t }
             else if let Some(t) = self.auth_header() { t }
@@ -143,7 +154,7 @@ impl PartsExt for Parts {
         }
     }
 
-    fn get_session_role<'r>(&'r self, role: Role) -> Result<Token> {
+    fn get_session_role(&'r self, role: Role) -> Result<Token> {
         let s = self.get_session()?;
         match s.role == role {
             true => Ok(s),

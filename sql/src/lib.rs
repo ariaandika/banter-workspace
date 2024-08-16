@@ -20,7 +20,7 @@ pub const [<FIND_ $al:upper>]:&str = concat!("SELECT * FROM ",stringify!($tb)," 
 macro_rules! select {
     ($tb:ident,$id:ident) => { select!($tb,$id,$tb); };
     ($tb:ident,$f:ident,$al:ident) => {paste!{
-pub const [<SELECT_ $tb:upper _BY_ $f:upper>]:&str = concat!("SELECT * FROM ",stringify!($tb)," WHERE ",stringify!($f)," = $1");
+pub const [<SELECT_ $tb:upper _BY_ $f:upper>]:&str = concat!("SELECT * FROM ",stringify!($tb)," WHERE ",stringify!($f)," = $1 LIMIT $2 OFFSET $3");
     }};
 }
 

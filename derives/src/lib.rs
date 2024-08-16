@@ -89,6 +89,15 @@ fn id_decode_impl(ast: &DeriveInput) -> syn::Result<TokenStream> {
             }
         }
 
+        impl<'q> ::sqlx::Encode<'q,::sqlx::Postgres> for #name #ty_generics #where_clause {
+            fn encode_by_ref(
+                &self,
+                buf: &mut <::sqlx::Postgres as ::sqlx::Database>::ArgumentBuffer<'q>,
+            ) -> Result<::sqlx::encode::IsNull, ::sqlx::error::BoxDynError> {
+                <i32 as ::sqlx::Encode<::sqlx::Postgres>>::encode_by_ref(&self.0, buf)
+            }
+        }
+
         impl<'r> ::sqlx::Decode<'r,::sqlx::Postgres> for #name #ty_generics #where_clause {
             fn decode(value: <::sqlx::Postgres as ::sqlx::Database>::ValueRef<'r>) -> Result<Self, ::sqlx::error::BoxDynError> {
                 Ok(Self(<i32 as ::sqlx::Decode<::sqlx::Postgres>>::decode(value)?))

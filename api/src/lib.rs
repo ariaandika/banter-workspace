@@ -106,14 +106,14 @@ async fn handle_orders(parts: &Parts, _: Body, state: Arc<PgPool>) -> Result {
 }
 
 async fn handle_sales(parts: &Parts, _: Body, state: Arc<PgPool>) -> Result {
-    let path = parts.normalize_path();
-    let path = &path["/sales".len()..];
+    let path = parts.normalize_prefix("/sales".len());
 
-    let (_session, _sales) = parts.get_session_role(Sales)?.split::<SalesData>()?;
+    let (_session, sales) = parts.get_session_role(Sales)?.split::<SalesData>()?;
+    let (limit,page) = parts.parse_query();
 
     match (&parts.method, path) {
         (GET, "/") => sqlx::query_as::<_, Orders>(SELECT_ORDER_STATUS_BY_WH_ID)
-            .bind(DEFAULT_LIMIT).bind(0).fetch_all(&*state).await.fatal()?
+            .bind(&sales.wh_id).bind(limit).bind(page).fetch_all(&*state).await.fatal()?
             .into_response(),
         _ => NOT_FOUND,
     }
