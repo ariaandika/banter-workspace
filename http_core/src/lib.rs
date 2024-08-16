@@ -1,13 +1,12 @@
-use std::{fmt::{Debug, Display, Formatter as Fmt, Result as FmtRes}, num::NonZeroUsize};
+use std::{env::var, fmt::{Debug, Display, Formatter as Fmt, Result as FmtRes}, sync::LazyLock};
+use auth::{Error as AuthError, Role, Token};
+use bytes::Bytes;
+use http_body_util::Full;
+use hyper::{header::{AUTHORIZATION, CONTENT_TYPE, COOKIE}, http::response::Builder as ResponseBuilder, Method, StatusCode};
+use serde::Serialize;
 
 pub use hyper::{body::Incoming as Body, http::request::Parts};
 pub use serde_json::json;
-
-use auth::Error as AuthError;
-use bytes::Bytes;
-use http_body_util::Full;
-use hyper::{header::CONTENT_TYPE, http::response::Builder as ResponseBuilder, Method, StatusCode};
-use serde::Serialize;
 
 pub type Request = hyper::Request<Body>;
 pub type Response<T = Full<Bytes>> = hyper::Response<T>;
@@ -53,15 +52,12 @@ impl Error {
     }
 }
 
+#[inline]
 fn auth_status_code(auth: &AuthError) -> StatusCode {
     match auth {
         AuthError::Forbidden => StatusCode::FORBIDDEN,
         _ => StatusCode::UNAUTHORIZED
     }
-}
-
-pub fn body<T>(body: T) -> Full<Bytes> where Bytes: From<T> {
-    Full::new(Bytes::from(body))
 }
 
 pub trait Builder {
@@ -75,12 +71,12 @@ impl Builder for ResponseBuilder {
     fn json<T>(self, json: T) -> Result where T: Serialize {
         Ok(self
             .header(CONTENT_TYPE, "application/json")
-            .body(body(serde_json::to_vec(&json)?))?)
+            .body(Full::new(Bytes::from(serde_json::to_vec(&json)?)))?)
     }
     fn html<T>(self, html: T) -> Result where Bytes: From<T> {
         Ok(self
             .header(CONTENT_TYPE, "text/html")
-            .body(body(html))?)
+            .body(Full::new(Bytes::from(html)))?)
     }
 }
 
@@ -92,47 +88,62 @@ impl<S> IntoResponse for S where S: Serialize {
     fn into_response(self) -> Result { Response::builder().json(self) }
 }
 
-pub mod util {
-    use auth::Token;
-    use hyper::header::{AUTHORIZATION, COOKIE};
-    use super::{Parts, Result, Error, AuthError};
+const SESSION_KEY: &str = "access_token";
+const JWT_SECRET: LazyLock<String> = LazyLock::new(||var("JWT_SECRET").expect("unchecked jwt secret"));
 
-    pub fn normalize_path<'r>(path: &'r str) -> &'r str {
-        match path {
-            "/" => path,
+pub trait PartsExt {
+    fn normalize_path<'r>(&'r self) -> &'r str;
+    fn get_cookie<'r>(&'r self, key: &str) -> Option<&'r str>;
+    fn auth_header<'r>(&'r self) -> Option<&'r str>;
+    fn get_session<'r>(&'r self) -> Result<Token>;
+    fn get_session_role<'r>(&'r self, role: Role) -> Result<Token>;
+}
+
+impl PartsExt for Parts {
+    fn normalize_path<'r>(&'r self) -> &'r str {
+        match self.uri.path() {
+            e @ "/" => e,
+            e if e.is_empty() => "/",
             e if e.ends_with("/") => &e[..e.len()-1],
             e => e
         }
     }
-
-    pub fn cookie<'r>(key: &str, parts: &'r Parts) -> Option<&'r str> {
-        parts.headers.get(COOKIE)?
+    fn get_cookie<'r>(&'r self, key: &str) -> Option<&'r str> {
+        self.headers.get(COOKIE)?
             .to_str().ok()?.split('&')
             .find(|e|e.starts_with(key))?
             .split_once('=').map(|e|e.1)
     }
 
-    pub fn auth_header<'r>(parts: &'r Parts) -> Option<&'r str> {
-        parts.headers.get(AUTHORIZATION)?
+    fn auth_header<'r>(&'r self) -> Option<&'r str> {
+        self.headers.get(AUTHORIZATION)?
             .to_str().ok()?.split_once(" ").map(|e|e.1)
     }
 
-    pub fn session<'r>(secret: &str, session_key: &str, parts: &'r Parts) -> Result<Token> {
-        match Token::from_token_str(secret, if let Some(t) = cookie(session_key, &parts)
-            { t } else if let Some(t) = auth_header(&parts) { t } else {
-                return Err(Error::Auth(AuthError::Unauthorized));
-            }) {
+    fn get_session<'r>(&self) -> Result<Token> {
+        match Token::from_token_str(&*JWT_SECRET,
+            if let Some(t) = self.get_cookie(SESSION_KEY) { t }
+            else if let Some(t) = self.auth_header() { t }
+            else { return Err(Error::Auth(AuthError::Unauthorized)); })
+        {
             Ok(ok) => Ok(ok),
             Err(err) => Err(Error::Auth(err)),
         }
     }
+
+    fn get_session_role<'r>(&'r self, role: Role) -> Result<Token> {
+        let s = self.get_session()?;
+        match s.role == role {
+            true => Ok(s),
+            false => Err(Error::Auth(AuthError::Forbidden)),
+        }
+    }
 }
-
-
 
 impl std::error::Error for Error { }
 impl Debug for Error { fn fmt(&self, f: &mut Fmt<'_>) -> FmtRes { self.write(f) } }
 impl Display for Error { fn fmt(&self, f: &mut Fmt<'_>) -> FmtRes { self.write(f) } }
+impl From<AuthError> for Error { fn from(value: AuthError) -> Self { Self::Auth(value) } }
 
 macro_rules! fatal_err { ($id: path) => {
     impl From<$id> for Error { fn from(value: $id) -> Self { Self::InternalError(value.to_string()) } }
