@@ -34,6 +34,32 @@ pub enum Status {
     Completed,
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+pub struct UserAnon {
+    pub user_id: Option<UserId>,
+    pub name: String,
+    pub phone: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct Destination {
+    pub kelurahan: String,
+    pub kecamatan: String,
+    pub kabupaten: String,
+    pub provinsi: String,
+    pub kodepos: String,
+    pub detail: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct Package {
+    pub name: String,
+    pub weight: f32,
+    pub length: f32,
+    pub width: f32,
+    pub height: f32,
+}
+
 id!(UserId);
 id!(WhId);
 id!(OrderId);
@@ -68,8 +94,8 @@ pub struct Warehouses {
 #[derive(Debug, Serialize, FromRow)]
 pub struct Orders {
     pub order_id: OrderId,
-    pub sender_sid: UserSid,
-    pub receiver_sid: UserSid,
+    pub sender: UserSid,
+    pub receiver: UserSid,
     pub destination: String,
     pub packages: String,
 }

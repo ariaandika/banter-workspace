@@ -1,63 +1,100 @@
-use std::{borrow::Cow, env::var, fmt::{Debug, Display, Formatter as Fmt, Result as FmtRes}, sync::LazyLock};
+use std::{borrow::Cow, env::var, fmt::{Debug, Display, Formatter as Fmt, Result as FmtRes}, future::Future, sync::LazyLock};
 use auth::{Error as AuthError, Role, Token};
 use bytes::Bytes;
-use http_body_util::Full;
+use http_body_util::{BodyExt as _, Full};
 use hyper::{header::{AUTHORIZATION, CONTENT_TYPE, COOKIE}, http::response::Builder as ResponseBuilder, Method, StatusCode};
-use serde::Serialize;
+use serde::{de::DeserializeOwned, Serialize};
 
 pub use hyper::{body::Incoming as Body, http::request::Parts};
-pub use serde_json::json;
+pub use serde_json::{json, ser};
 
 pub type Request = hyper::Request<Body>;
 pub type Response<T = Full<Bytes>> = hyper::Response<T>;
 pub type Result<T = Response, E = Error> = std::result::Result<T,E>;
-pub type Paginate = (i32,i32);
+pub type Paginate = (u32,u32);
 
 pub const NOT_FOUND: Result = Err(Error::Http(StatusCode::NOT_FOUND));
 pub const UNAUTHORIZED: Result = Err(Error::Auth(AuthError::Unauthorized));
 pub const GET: &Method = &Method::GET;
 pub const POST: &Method = &Method::POST;
 
+pub enum LogicError {
+    UserIdNotFound(i32)
+}
+
 pub enum Error {
     Http(StatusCode),
     BadRequest(String),
     InternalError(String),
     Auth(AuthError),
+    Logic(LogicError),
 }
 
 impl Error {
+    #[deprecated = "into_response is user responsibility"]
     pub fn into_response(self) -> Response {
         if let Error::InternalError(ref message) = self {
             tracing::error!(target: "InternalError",message);
         }
 
-        let build = Response::builder();
-        let build = match &self {
-            Error::Http(status) => build.status(status),
-            Error::InternalError(_) => build.status(StatusCode::INTERNAL_SERVER_ERROR),
-            Error::Auth(err) => build.status(auth_status_code(&err)),
-            Error::BadRequest(_) => build.status(StatusCode::BAD_REQUEST),
-        };
+        let build = Response::builder().status(self.status());
 
         // TODO: write body based on accept header
         build.empty().expect("Infallible")
     }
 
-    pub fn write(&self, f: &mut Fmt<'_>) -> std::fmt::Result {
-        match &self {
-            Error::Http(status) => write!(f, "{}", status.canonical_reason().unwrap_or("HttpError")),
-            Error::InternalError(msg) => write!(f, "{msg}"),
-            Error::Auth(err) => write!(f, "{err}"),
-            Error::BadRequest(msg) => write!(f, "{msg}"),
+    #[inline]
+    pub fn status(&self) -> StatusCode {
+        match self {
+            Error::Http(st) => st.clone(),
+            Error::BadRequest(_) => StatusCode::BAD_REQUEST,
+            Error::InternalError(_) => StatusCode::INTERNAL_SERVER_ERROR,
+            Error::Auth(AuthError::Forbidden) => StatusCode::FORBIDDEN,
+            Error::Auth(_) => StatusCode::UNAUTHORIZED,
+            Error::Logic(_) => StatusCode::UNPROCESSABLE_ENTITY,
         }
+    }
+
+    #[inline]
+    pub const fn error(&self) -> &'static str {
+        match self {
+            Error::Http(s) => status_msg(s),
+            Error::BadRequest(_) => "Bad Request",
+            Error::InternalError(_) => "Internal Server Error",
+            Error::Auth(er) => er.error(),
+            Error::Logic(_) => "Unprocessable Entity",
+        }
+    }
+
+    #[inline]
+    #[doc = "InternalError message redaction is user responsibility"]
+    pub fn message(self) -> String {
+        match self {
+            Error::Http(ref s) => status_msg(s).into(),
+            Error::Auth(er) => er.message().into(),
+            Error::BadRequest(m) | Error::InternalError(m) => m,
+            Error::Logic(e) => match e {
+                LogicError::UserIdNotFound(id) => format!("User Id `{id}` Not Found "),
+            },
+        }
+    }
+
+    pub fn message_write(&self, f: &mut Fmt<'_>) -> std::fmt::Result {
+        write!(f, "{}", match self {
+            Error::BadRequest(m) | Error::InternalError(m) => &*m,
+            Error::Auth(e) => e.message(),
+            e => e.error(),
+        })
     }
 }
 
-#[inline]
-fn auth_status_code(auth: &AuthError) -> StatusCode {
-    match auth {
-        AuthError::Forbidden => StatusCode::FORBIDDEN,
-        _ => StatusCode::UNAUTHORIZED
+pub trait BodyExt {
+    fn json<T>(self) -> impl Future<Output = Result<T>> + Send where T: DeserializeOwned;
+}
+
+impl BodyExt for Body {
+    async fn json<T>(self) -> Result<T> where T: DeserializeOwned {
+        serde_json::from_slice(&self.collect().await?.to_bytes()).bad_request()
     }
 }
 
@@ -83,10 +120,13 @@ impl Builder for ResponseBuilder {
 
 pub trait IntoResponse {
     fn into_response(self) -> Result;
+    fn json_str(&self) -> Result<String>;
 }
 
 impl<S> IntoResponse for S where S: Serialize {
+    #[inline]
     fn into_response(self) -> Result { Response::builder().json(self) }
+    fn json_str(&self) -> Result<String> { ser::to_string(self).map_err(|e|Error::BadRequest(e.to_string())) }
 }
 
 const SESSION_KEY: &str = "access_token";
@@ -94,7 +134,7 @@ const JWT_SECRET: LazyLock<String> = LazyLock::new(||var("JWT_SECRET").expect("u
 
 pub trait PartsExt<'r> {
     fn normalize_path(&'r self) -> &'r str;
-    fn normalize_prefix(&'r self, prefix: usize) -> &'r str;
+    fn normalize_prefix(&'r self, prefix: &'r str) -> &'r str;
     fn parse_query(&'r self) -> Paginate;
     fn get_cookie(&'r self, key: &str) -> Option<&'r str>;
     fn auth_header(&'r self) -> Option<&'r str>;
@@ -104,31 +144,21 @@ pub trait PartsExt<'r> {
 
 impl<'r> PartsExt<'r> for Parts {
     fn normalize_path(&'r self) -> &'r str {
-        match self.uri.path() {
-            e @ "/" => e,
-            e if e.is_empty() => "/",
-            e if e.ends_with("/") => &e[..e.len()-1],
-            e => e
-        }
+        self.uri.path().strip_suffix("/").unwrap_or(self.uri.path())
     }
 
-    // panic if path prefix not checked
-    fn normalize_prefix(&'r self, prefix: usize) -> &'r str {
-        match self.uri.path() {
-            e @ "/" => e,
-            e if e.is_empty() => "/",
-            e if e.ends_with("/") => &e[prefix..e.len()-1],
-            e => &e[prefix..]
-        }
+    fn normalize_prefix(&'r self, prefix: &'r str) -> &'r str {
+        let p = self.normalize_path();
+        p.strip_prefix(prefix).unwrap_or(p)
     }
 
     fn parse_query(&'r self) -> Paginate {
-        fn par((_, v): (Cow<str>,Cow<str>)) -> Option<i32> { v.parse().ok() }
+        fn par((_, v): (Cow<str>,Cow<str>)) -> Option<u32> { v.parse().ok() }
         let Some(q) = self.uri.query() else { return (20,0); };
         let mut qs = form_urlencoded::parse(q.as_bytes());
         let limit = qs.find(|(k,_)|k=="limit").and_then(par).unwrap_or(20);
-        let page = qs.find(|(k,_)|k=="page").and_then(par).unwrap_or(0);
-        (limit, limit * page)
+        let page = qs.find(|(k,_)|k=="page").and_then(par).unwrap_or(1);
+        (limit, limit * page.checked_sub(1).unwrap_or(page))
     }
 
     fn get_cookie(&'r self, key: &str) -> Option<&'r str> {
@@ -164,8 +194,8 @@ impl<'r> PartsExt<'r> for Parts {
 }
 
 impl std::error::Error for Error { }
-impl Debug for Error { fn fmt(&self, f: &mut Fmt<'_>) -> FmtRes { self.write(f) } }
-impl Display for Error { fn fmt(&self, f: &mut Fmt<'_>) -> FmtRes { self.write(f) } }
+impl Debug for Error { fn fmt(&self, f: &mut Fmt<'_>) -> FmtRes { self.message_write(f) } }
+impl Display for Error { fn fmt(&self, f: &mut Fmt<'_>) -> FmtRes { write!(f, "{}", self.error()) } }
 impl From<AuthError> for Error { fn from(value: AuthError) -> Self { Self::Auth(value) } }
 
 macro_rules! fatal_err { ($id: path) => {
@@ -194,6 +224,18 @@ impl<T, E> ErrorExt<T> for std::result::Result<T, E> where E: std::error::Error 
             Ok(ok) => Ok(ok),
             Err(err) => Err(Error::BadRequest(err.to_string())),
         }
+    }
+}
+
+const fn status_msg(status: &StatusCode) -> &'static str {
+    match *status {
+        StatusCode::BAD_REQUEST => "Bad Request",
+        StatusCode::UNAUTHORIZED => "Unauthorized",
+        StatusCode::FORBIDDEN => "Forbidden",
+        StatusCode::PAYLOAD_TOO_LARGE => "Payload Too Large",
+        StatusCode::UNPROCESSABLE_ENTITY => "Unprocessable Entity",
+        StatusCode::INTERNAL_SERVER_ERROR => "Internal Server Error",
+        _ => "Http Error",
     }
 }
 

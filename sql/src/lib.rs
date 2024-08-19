@@ -31,6 +31,13 @@ pub const [<FIND_ $al:upper _BY_ $f:upper>]:&str = concat!("SELECT * FROM ",stri
     }};
 }
 
+macro_rules! id {
+    ($tb:ident,$id:ident) => { find!($tb,$id,$tb); };
+    ($tb:ident,$f:ident,$al:ident) => {paste!{
+pub const [<ID_ $al:upper>]:&str = concat!("SELECT ",stringify!($f)," FROM ",stringify!($tb)," WHERE ",stringify!($f)," = $1 LIMIT 1");
+    }};
+}
+
 pub const MAX_LIMIT: i32 = 100;
 pub const DEFAULT_LIMIT: i32 = 10;
 
@@ -46,11 +53,21 @@ imtable!(order_status, order_id);
 imtable!(users_snapshot, snapshot_id, users_sn);
 imtable!(wh_snapshot, snapshot_id, wh_sn);
 
+id!(users_snapshot, snapshot_id, users_sn);
+id!(wh_snapshot, snapshot_id, wh_sn);
+
 find!(users, phone);
 find!(warehouses, phone, wh);
 select!(tracings, order_id);
 select!(order_status, wh_id);
 find!(order_status, wh_id);
+
+pub const SELECT_ORDERS_TRACINGS: &str = concat!(
+    "SELECT * FROM order_status os ",
+    "LEFT JOIN orders o ON os.order_id = o.order_id ",
+    "LEFT JOIN tracings s ON os.tracing_id = s.tracing_id ",
+    "LIMIT $1 OFFSET $2"
+);
 
 pub const FIND_LATEST_TRACING: &str = concat!(
     "SELECT * FROM tracings WHERE order_id = $1 ORDER BY traced_at DESC LIMIT 1"
@@ -69,7 +86,8 @@ pub const INSERT_TRACING: &str = concat!("INSERT INTO tracings(",
     "order_id,subject_sid,wh_sid,status",
     ") VALUES ($1,$2,$3,$4)"
 );
-pub const INSERT_USERS_SN: &str = "INSERT INTO users_snapshot(data) VALUES ($1)";
+pub const INSERT_USERS_SN: &str = "INSERT INTO users_snapshot(data) VALUES ($1::json)";
+pub const CREATE_USERS_SN: &str = "INSERT INTO users_snapshot(data) VALUES ($1::json) RETURNING snapshot_id";
 pub const INSERT_WH_SN: &str = "INSERT INTO wh_snapshot(data) VALUES ($1)";
 pub const INSERT_EMPLOYEES: &str = "INSERT INTO employees(user_id,wh_id) VALUES($1,$2)";
 pub const INSERT_ORDER_STATUS: &str = "INSERT INTO order_status(order_id,tracing_id,wh_id) VALUES($1,$2,$3)";

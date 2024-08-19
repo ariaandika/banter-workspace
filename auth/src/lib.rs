@@ -118,25 +118,35 @@ pub enum Error {
     InvalidToken
 }
 
+impl Error {
+    #[inline]
+    pub const fn error(&self) -> &'static str {
+        match self {
+            Error::Unauthorized => "Unauthorized",
+            Error::InvalidCredential => "Invalid Credential",
+            Error::Forbidden => "Forbidden",
+            Error::InvalidToken => "Invalid Token",
+        }
+    }
+    pub const fn message(&self) -> &'static str {
+        match self {
+            Error::Unauthorized => "Authentication Required",
+            Error::InvalidCredential => "Invalid phone or password",
+            Error::Forbidden => "You are not allowed to access this resource",
+            Error::InvalidToken => "Token invalid, please issue a new token",
+        }
+    }
+}
+
 impl Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", match self {
-            Error::Unauthorized => "Unauthorized",
-            Error::Forbidden => "Forbidden",
-            Error::InvalidToken => "InvalidToken",
-            Error::InvalidCredential => "InvalidCredential",
-        })
+        write!(f, "{}", self.error())
     }
 }
 
 impl Debug for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", match self {
-            Error::Unauthorized => "Authentication Required",
-            Error::Forbidden => "You are not allowed to access this resource",
-            Error::InvalidToken => "Token invalid, please issue a new token",
-            Error::InvalidCredential => "Invalid phone or password",
-        })
+        write!(f, "{}", self.message())
     }
 }
 

@@ -1,4 +1,4 @@
-use std::{env::var, future::Future, pin::Pin, process, str::FromStr, sync::Arc};
+use std::{env::var, future::Future, pin::Pin, process, str::FromStr};
 use hyper::{server::conn::http1::Builder, service::Service};
 use hyper_util::rt::TokioIo;
 use sqlx::{postgres::PgPoolOptions, PgPool};
@@ -45,7 +45,7 @@ async fn server() -> Result<(), String> {
         }
     };
 
-    let pg_pool = match var("DATABASE_URL") {
+    let state = match var("DATABASE_URL") {
         Ok(db_url) => match PgPoolOptions::new().connect_lazy(&db_url) {
             Ok(ok) => ok,
             Err(err) => Err(format!("DATABASE_URL: {err}"))?,
@@ -53,15 +53,13 @@ async fn server() -> Result<(), String> {
         Err(err) => Err(format!("DATABASE_URL: {err}"))?,
     };
 
-    let state = Arc::new(pg_pool);
-
     loop {
         let Ok((io, _)) = tcp.accept().await else { continue };
-        spawn(Builder::new().serve_connection(TokioIo::new(io), Server(Arc::clone(&state))));
+        spawn(Builder::new().serve_connection(TokioIo::new(io), Server(state.clone())));
     }
 }
 
-pub struct Server(Arc<PgPool>);
+pub struct Server(PgPool);
 
 impl Service<Request> for Server {
     type Response = Response;
@@ -69,15 +67,10 @@ impl Service<Request> for Server {
     type Future = Pin<Box<dyn Future<Output = hyper::Result<Response>> + Send>>;
     fn call(&self, req: Request) -> Self::Future {
         let span = info_span!("","{}{}",req.method(),req.uri().path());
-        Box::pin(router(req, Arc::clone(&self.0)).instrument(span))
+        Box::pin(router(req, self.0.clone()).instrument(span))
     }
 }
 
-async fn router(req: Request, state: Arc<PgPool>) -> hyper::Result<Response> {
-    let (parts, body) = req.into_parts();
-    match api::router(&parts, body, state).await {
-        Ok(ok) => Ok(ok),
-        Err(err) => Ok(err.into_response())
-    }
-}
+#[inline(always)]
+async fn router(req: Request, state: PgPool) -> hyper::Result<Response> { Ok(api::handle(req, state).await) }
 
